@@ -5,7 +5,7 @@ Responsibilities:
   1. Load environment variables and initialise the Discord client with slash commands.
   2. Route incoming messages (mention / DM only).
   3. Build the prompt with short-term + long-term memory.
-  4. Call Cerebras, post-process output, and reply.
+  4. Call Azure Foundry API, post-process output, and reply.
   5. Fire-and-forget background memory extraction every N messages.
 """
 
@@ -19,7 +19,7 @@ import discord
 from discord import app_commands
 from dotenv import load_dotenv
 
-import cerebras_client
+import ai_client
 from memory import ShortTermMemory, LongTermMemory, init_db, init_supabase
 
 # ---------------------------------------------------------------------------
@@ -37,15 +37,15 @@ log = logging.getLogger("airi")
 load_dotenv()
 
 DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN", "")
-CEREBRAS_API_KEY: str = os.getenv("CEREBRAS_API_KEY", "")
-CEREBRAS_EXTRACTOR_API_KEY: str = os.getenv("CEREBRAS_EXTRACTOR_API_KEY", "")
+AZURE_API_KEY: str = os.getenv("AZURE_API_KEY", "")
+AZURE_ENDPOINT: str = os.getenv("AZURE_ENDPOINT", "")
 
 if not DISCORD_TOKEN:
     raise RuntimeError("DISCORD_TOKEN is not set in .env")
-if not CEREBRAS_API_KEY:
-    raise RuntimeError("CEREBRAS_API_KEY is not set in .env")
-if not CEREBRAS_EXTRACTOR_API_KEY:
-    raise RuntimeError("CEREBRAS_EXTRACTOR_API_KEY is not set in .env")
+if not AZURE_API_KEY:
+    raise RuntimeError("AZURE_API_KEY is not set in .env")
+if not AZURE_ENDPOINT:
+    raise RuntimeError("AZURE_ENDPOINT is not set in .env")
 
 # ---------------------------------------------------------------------------
 # Memory extraction trigger — every N messages per user
@@ -159,8 +159,8 @@ def build_system_prompt(user_facts: list[str]) -> str:
 async def _extract_and_save(user_id: str, user_message: str) -> None:
     """Run the extractor model and persist new facts."""
     try:
-        facts = await cerebras_client.extract_memory(
-            CEREBRAS_EXTRACTOR_API_KEY, user_message
+        facts = await ai_client.extract_memory(
+            AZURE_API_KEY, AZURE_ENDPOINT, user_message
         )
         if facts:
             await ltm.save_facts(user_id, facts)
@@ -213,13 +213,14 @@ async def on_message(message: discord.Message):
     stm.add(user_id, "user", user_text)
     history = stm.get(user_id)
 
-    # 5. Build messages array for Cerebras
+    # 5. Build messages array for Azure Foundry
     messages = [{"role": "system", "content": system_prompt}] + history
 
-    # 6. Call Cerebras with typing indicator
+    # 6. Call Azure API with typing indicator
     async with message.channel.typing():
-        reply_text = await cerebras_client.get_chat_response(
-            CEREBRAS_API_KEY,
+        reply_text = await ai_client.get_chat_response(
+            AZURE_API_KEY,
+            AZURE_ENDPOINT,
             messages,
         )
 

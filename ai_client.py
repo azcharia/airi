@@ -1,10 +1,10 @@
 """
-cerebras_client.py - Async wrapper around the Cerebras Cloud SDK.
+ai_client.py - Async wrapper around the OpenAI SDK for Azure Foundry (Kimi-K2.5).
 
 Provides:
-  - get_chat_response() : chat completions with the primary model
-  - extract_memory()    : background fact extraction with the small model
-  - Exponential-backoff retry logic for transient API errors
+  - get_chat_response() : chat completions with Kimi-K2.5
+  - extract_memory()    : background fact extraction
+  - Exponential-backoff retry logic for transient API errors & Rate Limits (20 RPM constraint)
 """
 
 import asyncio
@@ -12,16 +12,15 @@ import json
 import logging
 from typing import Optional
 
-from cerebras.cloud.sdk import AsyncCerebras
+from openai import AsyncOpenAI
 
-log = logging.getLogger("airi.cerebras")
+log = logging.getLogger("airi.ai")
 
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
-PRIMARY_MODEL = "gpt-oss-120b"
-FALLBACK_MODEL = "llama3.1-8b"
-EXTRACTOR_MODEL = "llama3.1-8b"
+PRIMARY_MODEL = "Kimi-K2.5"
+EXTRACTOR_MODEL = "Kimi-K2.5"
 
 # ---------------------------------------------------------------------------
 # Retry settings
@@ -58,6 +57,7 @@ async def _retry(coro_factory, label: str = "api_call"):
 
 async def get_chat_response(
     api_key: str,
+    base_url: str,
     messages: list[dict],
     *,
     temperature: float = 0.7,
@@ -65,27 +65,24 @@ async def get_chat_response(
 ) -> str:
     """Return the assistant's reply for a chat conversation.
 
-    Tries PRIMARY_MODEL first; on failure falls back to FALLBACK_MODEL.
-    Each model attempt uses exponential-backoff retries.
+    Tries PRIMARY_MODEL with exponential-backoff retries.
     """
-    client = AsyncCerebras(api_key=api_key)
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
-    for model in (PRIMARY_MODEL, FALLBACK_MODEL):
-        try:
-            resp = await _retry(
-                lambda m=model: client.chat.completions.create(
-                    model=m,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                ),
-                label=f"chat/{model}",
-            )
-            text = resp.choices[0].message.content
-            return text.strip() if text else ""
-        except Exception as exc:
-            log.error("Model %s exhausted retries: %s", model, exc)
-            continue  # try next model
+    try:
+        resp = await _retry(
+            lambda m=PRIMARY_MODEL: client.chat.completions.create(
+                model=m,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ),
+            label=f"chat/{PRIMARY_MODEL}",
+        )
+        text = resp.choices[0].message.content
+        return text.strip() if text else ""
+    except Exception as exc:
+        log.error("Model %s exhausted retries: %s", PRIMARY_MODEL, exc)
 
     return "ah... maaf... aku lagi nggak bisa mikir... coba lagi nanti ya..."
 
@@ -106,9 +103,9 @@ EXTRACTOR_SYSTEM_PROMPT = (
 )
 
 
-async def extract_memory(api_key: str, user_message: str) -> list[str]:
-    """Call the small extractor model and return a list of fact strings."""
-    client = AsyncCerebras(api_key=api_key)
+async def extract_memory(api_key: str, base_url: str, user_message: str) -> list[str]:
+    """Call the extractor model and return a list of fact strings."""
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     messages = [
         {"role": "system", "content": EXTRACTOR_SYSTEM_PROMPT},
