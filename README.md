@@ -84,7 +84,6 @@ CEREBRAS_API_KEY=your_cerebras_chat_api_key
 CEREBRAS_EXTRACTOR_API_KEY=your_cerebras_extractor_api_key
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_KEY=your_supabase_service_role_key
-FLASK_PORT=8080
 ```
 
 ### 4. Jalankan
@@ -119,19 +118,6 @@ Pastikan semua file (kecuali `.env`) sudah di-push ke repository GitHub.
    - `FLASK_PORT` = `8080`
 6. Klik **Create Web Service**.
 
-### 3. Anti-Sleep dengan Cron-Job
-
-Service gratis di Render akan sleep setelah 15 menit tanpa traffic. Untuk menjaganya tetap aktif:
-
-1. Buka [cron-job.org](https://cron-job.org) dan buat akun gratis.
-2. Buat cron job baru:
-   - **URL**: `https://airi-bot.onrender.com/health` (sesuaikan dengan URL Render kamu)
-   - **Schedule**: Every **10 minutes** (`*/10 * * * *`)
-   - **Method**: `GET`
-3. Aktifkan cron job.
-
-Dengan ini, Render akan menerima ping setiap 10 menit dan service tidak akan sleep.
-
 ## Discord Bot Setup
 
 1. Buka [Discord Developer Portal](https://discord.com/developers/applications).
@@ -157,8 +143,7 @@ Dengan ini, Render akan menerima ping setiap 10 menit dan service tidak akan sle
 |----------|-----------|
 | Bahasa | Python 3.10+ |
 | Discord Library | discord.py 2.3+ |
-| AI Model (Chat) | Cerebras `gpt-oss-120b` (fallback: `llama3.1-70b-versatile`) |
-| AI Model (Memory) | Cerebras `llama3.1-8b-instant` |
+| AI Model (Chat) | Cerebras `gpt-oss-120b` (fallback: `llama3.1-8b`) |
+| AI Model (Memory) | Cerebras `llama3.1-8b` |
 | Database | Supabase (PostgreSQL) |
-| Keep-Alive | Flask |
-| Deployment | Render.com + cron-job.org |
+| Deployment | Render.com |

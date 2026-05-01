@@ -22,7 +22,6 @@ from dotenv import load_dotenv
 
 import cerebras_client
 from memory import ShortTermMemory, LongTermMemory, init_db, init_supabase
-from keep_alive import keep_alive
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -284,10 +283,6 @@ async def cmd_reset(interaction: discord.Interaction):
 # ---------------------------------------------------------------------------
 
 def main():
-    # Start the Flask keep-alive server for Render
-    keep_alive()
-    log.info("Keep-alive server started")
-
     # Run the bot
     client.run(DISCORD_TOKEN, log_handler=None)
 
