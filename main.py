@@ -2,12 +2,11 @@
 main.py - Airi Discord Bot entry point.
 
 Responsibilities:
-  1. Load environment variables and start the Flask keep-alive server.
-  2. Initialise the Discord client with slash commands.
-  3. Route incoming messages (mention / DM only).
-  4. Build the prompt with short-term + long-term memory.
-  5. Call Cerebras, post-process output, and reply.
-  6. Fire-and-forget background memory extraction every N messages.
+  1. Load environment variables and initialise the Discord client with slash commands.
+  2. Route incoming messages (mention / DM only).
+  3. Build the prompt with short-term + long-term memory.
+  4. Call Cerebras, post-process output, and reply.
+  5. Fire-and-forget background memory extraction every N messages.
 """
 
 import asyncio
