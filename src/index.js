@@ -121,12 +121,21 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
     const isDm = message.channel.type === ChannelType.DM;
-    const isMentioned = message.mentions.has(client.user.id);
+    const isMentioned = message.mentions.users.has(client.user.id);
+
+    console.log(`[DEBUG] Message received: "${message.content}", DM: ${isDm}, Mentioned: ${isMentioned}`);
 
     if (!isDm && !isMentioned) return;
 
     const userId = message.author.id.toString();
-    const userText = cleanMention(message.content);
+    let userText = cleanMention(message.content);
+
+    console.log(`[DEBUG] Cleaned message: "${userText}"`);
+
+    // If the user only tagged the bot without any text, default to a simple greeting
+    if (!userText && isMentioned) {
+        userText = "halo airi";
+    }
 
     if (!userText) return;
 
