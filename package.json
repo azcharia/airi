@@ -1,11 +1,11 @@
 {
   "name": "airi",
   "version": "1.0.0",
-  "description": "Airi adalah bot Discord AI yang berkepribadian pemalu, pendiam, tapi manis. Dibangun dengan Python, `discord.py`, dan Cerebras Cloud API.",
-  "main": "index.js",
+  "description": "Airi adalah bot Discord AI yang berkepribadian pemalu, pendiam, tapi manis. Dibangun dengan Node.js, discord.js, dan Azure AI Foundry.",
+  "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test_core.js"
   },
   "keywords": [],
   "author": "",

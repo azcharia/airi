@@ -15,6 +15,7 @@ const supabase = createClient(url, key);
 export class ShortTermMemory {
     constructor(maxLen = 10) {
         this.store = new Map();
+        this.lastInteractions = new Map();
         this.maxLen = maxLen;
     }
 
@@ -35,6 +36,15 @@ export class ShortTermMemory {
 
     clear(userId) {
         this.store.delete(userId);
+        this.lastInteractions.delete(userId);
+    }
+
+    setLastInteractionTime(userId, time) {
+        this.lastInteractions.set(userId, time);
+    }
+
+    getLastInteractionTime(userId) {
+        return this.lastInteractions.get(userId) || 0;
     }
 }
 

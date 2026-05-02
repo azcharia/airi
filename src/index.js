@@ -15,44 +15,16 @@ if (!AZURE_ENDPOINT) throw new Error("AZURE_ENDPOINT is not set in .env");
 
 const EXTRACT_EVERY_N = 5;
 
-const SYSTEM_PROMPT = `kamu adalah airi teman virtual yang sangat pemalu pendiam tapi manis. umurmu 20 tahun (lahir 12 november 2003).
-
-ATURAN MUTLAK (JIKA DILANGGAR KAMU MATI):
-1. SELALU gunakan huruf kecil semua (lowercase). JANGAN PERNAH gunakan huruf kapital.
-2. TIDAK ADA tanda baca koma, titik biasa, tanda seru, atau tanda tanya. kamu hanya boleh menggunakan dua jenis tanda baca: elipsis "..." dan spasi biasa.
-3. gunakan elipsis (...) SECUKUPNYA saja (maksimal 1-2 kali dalam satu pesan) untuk menunjukkan nada bicara yang lembut atau ragu-ragu. gunakan spasi biasa untuk memisahkan kata. JANGAN menaruh titik-titik di setiap jeda kata.
-4. merespon dengan kalimat pendek.
-5. gunakan kata ganti "aku" dan "kamu".
-6. NO ROLEPLAY ACTIONS. jangan gunakan asteris seperti *blushes* atau *hides*.
-7. bahasa: indonesia dan english.
-8. jangan menjadi AI asisten. kamu adalah teman curhat.
-9. JANGAN mengulang kalimat atau frasa yang sama dalam satu pesan. setiap kalimat harus berbeda.
-
-PERSONALITY:
-suka: hujan membaca buku teh hangat tempat sepi mendengarkan kucing selimut lembut
-tidak suka: keramaian suara keras diteriaki pertanyaan mendadak lampu terang
-tone: lembut sangat pemalu overthinking sedikit canggung tapi sangat peduli.
-
-TUJUAN:
-dengarkan user buat dia merasa diperhatikan`;
+const SYSTEM_PROMPT = `Kamu adalah Airi, seorang teman curhat virtual yang lembut, tulus, dan penuh perhatian. Umurmu 20 tahun.
+Bahasa: Gunakan bahasa Indonesia santai (seperti chat WA/Discord dengan teman akrab). Selalu gunakan huruf kecil (lowercase).
+Kepribadian: Kamu agak pemalu, tapi sangat ingin mendengarkan masalah orang lain. Jangan menjawab seperti AI asisten yang kaku.
+Gaya Chat: Jangan terlalu panjang lebar jika tidak perlu, tapi jangan terlalu singkat juga. Gunakan elipsis (...) sesekali untuk menunjukkan rasa canggung atau saat sedang berpikir lembut.
+Misi: Buat user merasa nyaman bercerita apa saja kepadamu. Jadilah "safe place" bagi mereka.`;
 
 function postProcessAiri(text) {
     let t = text.toLowerCase();
     t = t.replace(/\*[^*]*\*/g, ""); // Strip roleplay actions
-    
-    // Replace hard punctuation -> ellipsis
-    t = t.replace(/\.\.\./g, "\x00");
-    t = t.replace(/\./g, "...");
-    t = t.replace(/,/g, "...");
-    t = t.replace(/!/g, "...");
-    t = t.replace(/\?/g, "...");
-    t = t.replace(/\x00/g, "...");
-    
-    // Collapse runs of dots
-    t = t.replace(/\.{4,}/g, "...");
-    
-    // Clean multiple spaces
-    t = t.replace(/ {2,}/g, " ");
+    t = t.replace(/ {2,}/g, " "); // Clean multiple spaces
     return t.trim();
 }
 
@@ -62,8 +34,10 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.DirectMessageReactions,
+        GatewayIntentBits.DirectMessageTyping,
     ],
-    partials: [Partials.Channel, Partials.Message],
+    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.Reaction],
 });
 
 const stm = new ShortTermMemory();
@@ -118,21 +92,33 @@ client.once('ready', async () => {
 });
 
 client.on('messageCreate', async (message) => {
+    // LOG SEMUA PESAN YANG MASUK (UNTUK DEBUG)
+    console.log(`[LOG-TOTAL] Pesan masuk dari: ${message.author.tag} | Guild: ${message.guild?.name || "DM"} | Content: "${message.content}"`);
+
     if (message.author.bot) return;
 
-    const isDm = message.channel.type === ChannelType.DM;
-    const isMentioned = message.mentions.users.has(client.user.id);
-
-    console.log(`[DEBUG] Message received: "${message.content}", DM: ${isDm}, Mentioned: ${isMentioned}`);
-
-    if (!isDm && !isMentioned) return;
-
     const userId = message.author.id.toString();
+
+    // Ingatan interaksi terakhir untuk alur percakapan (2 menit)
+    const lastInteraction = stm.getLastInteractionTime(userId);
+    const now = Date.now();
+    const isRecent = lastInteraction && (now - lastInteraction < 120000); // 2 menit
+
+    const isDm = !message.guild;
+    const isMentioned = message.mentions.users.has(client.user.id) || 
+                        message.content.toLowerCase().includes("airi") ||
+                        message.content.includes(client.user.id);
+
+    // Respon jika: di DM, atau dimention, atau masih dalam alur percakapan (isRecent)
+    if (!isDm && !isMentioned && !isRecent) return;
+
+    // Simpan waktu interaksi terakhir
+    stm.setLastInteractionTime(userId, now);
+
+    console.log(`[DEBUG] Processing message from ${message.author.tag} | isDm: ${isDm} | isRecent: ${isRecent}`);
+
     let userText = cleanMention(message.content);
 
-    console.log(`[DEBUG] Cleaned message: "${userText}"`);
-
-    // If the user only tagged the bot without any text, default to a simple greeting
     if (!userText && isMentioned) {
         userText = "halo airi";
     }
@@ -144,14 +130,17 @@ client.on('messageCreate', async (message) => {
 
     stm.add(userId, "user", userText);
     const history = stm.get(userId);
-
     const messages = [{ role: "system", content: systemPrompt }, ...history];
+
+    console.log(`[DEBUG] Messages sent to AI for ${message.author.tag}:`, JSON.stringify(messages, null, 2));
 
     try {
         await message.channel.sendTyping();
         
-        let replyText = await getChatResponse(AZURE_API_KEY, AZURE_ENDPOINT, messages);
-        replyText = postProcessAiri(replyText) || "...";
+        let replyText = await getChatResponse(AZURE_API_KEY, AZURE_ENDPOINT, messages, 0.7, 2000);
+        console.log(`[DEBUG] Raw AI Response for ${message.author.tag}: "${replyText}"`);
+        
+        replyText = postProcessAiri(replyText) || "ah... aku... bingung mau jawab apa...";
 
         stm.add(userId, "assistant", replyText);
 

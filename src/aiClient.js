@@ -40,8 +40,13 @@ export async function getChatResponse(apiKey, baseUrl, messages, temperature = 0
             }),
             `chat/${PRIMARY_MODEL}`
         );
-        const text = resp.choices[0].message.content;
-        return text ? text.trim() : "";
+        
+        if (resp.choices && resp.choices[0]) {
+            console.log(`[DEBUG] AI generated ${resp.usage?.completion_tokens || 0} tokens.`);
+            const text = resp.choices[0].message?.content;
+            return text ? text.trim() : "ah... aku... bingung mau jawab apa...";
+        }
+        return "ah... aku... bingung mau jawab apa...";
     } catch (exc) {
         console.error(`Model ${PRIMARY_MODEL} exhausted retries:`, exc);
         return "ah... maaf... aku lagi nggak bisa mikir... coba lagi nanti ya...";

@@ -1,149 +1,65 @@
 # Airi — Discord AI Virtual Friend
 
-Airi adalah bot Discord AI yang berkepribadian pemalu, pendiam, tapi manis. Dibangun dengan Python, `discord.py`, dan Cerebras Cloud API.
+Airi adalah bot Discord AI yang berkepribadian pemalu, pendiam, tapi manis. Proyek ini telah direfaktor sepenuhnya menggunakan **Node.js** dan memanfaatkan **Azure AI Foundry** sebagai penyedia model LLM utama.
 
-## Fitur
+## ✨ Fitur Utama
 
-- **Persona Konsisten** — Post-processing pipeline memastikan output selalu lowercase, tanpa roleplay actions, dan hanya menggunakan elipsis secukupnya.
-- **Short-Term Memory** — Menyimpan 10 pesan terakhir per user sebagai konteks percakapan (in-process deque).
-- **Long-Term Memory** — Mengekstrak fakta permanen tentang user (nama, hobi, dll.) menggunakan AI model kecil dan menyimpannya di **Supabase (PostgreSQL)** — tidak hilang saat Render restart.
-- **Slash Commands** — `/memory` untuk melihat fakta yang diingat, `/reset` untuk menghapus semua memori.
-- **Keep-Alive** — Flask web server ringan agar Render.com tidak mematikan service.
+- **Persona Konsisten** — Pipeline pemrosesan teks memastikan output selalu lowercase, tanpa aksi roleplay, dan menggunakan elipsis (`...`) secara natural.
+- **Short-Term Memory** — Menyimpan konteks percakapan terakhir (10 pesan) per pengguna dalam memori aplikasi.
+- **Long-Term Memory** — Mengekstrak fakta permanen tentang pengguna (nama, preferensi, riwayat penting) dan menyimpannya di **Supabase (PostgreSQL)**.
+- **Azure AI Integration** — Menggunakan model **Kimi-K2.5** (atau model lain yang kompatibel) melalui endpoint Azure AI Foundry untuk respons yang cepat dan cerdas.
+- **Slash Commands** — `/memory` untuk melihat apa yang Airi ingat tentang Anda, dan `/reset` untuk menghapus semua data memori.
 
-## Struktur File
+## 📁 Struktur Proyek
 
-```
+```text
 airi/
-├── .env                  # Environment variables (JANGAN commit!)
-├── .env.example          # Template environment variables
-├── .gitignore
-├── requirements.txt
-├── keep_alive.py         # Flask dummy server (port 8080)
-├── memory.py             # Short-term (deque) & Long-term (Supabase) memory
-├── cerebras_client.py    # Async Cerebras API wrapper + retry logic
-├── main.py               # Bot utama: routing, pipeline, commands
-├── start.sh              # Script deployment untuk Render
-└── README.md
+├── src/
+│   ├── index.js      # Logika bot utama & event handler Discord
+│   ├── aiClient.js   # Wrapper API Azure OpenAI dengan retry logic
+│   └── memory.js     # Manajemen memori (Short-term Map & Supabase LTM)
+├── .env              # Konfigurasi environment (JANGAN commit!)
+├── Dockerfile        # Konfigurasi containerization (Node.js 18)
+├── package.json      # Dependensi Node.js
+└── schema.sql        # Skema database untuk Supabase
 ```
 
-## Setup Lokal
+## 🚀 Setup Lokal
 
-### 1. Clone & Install
-
+### 1. Instalasi Dependensi
+Pastikan Anda memiliki [Node.js](https://nodejs.org/) versi 18 atau lebih baru.
 ```bash
-git clone <repo-url> airi
-cd airi
-python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Linux/Mac:
-source venv/bin/activate
-
-pip install -r requirements.txt
+npm install
 ```
 
-### 2. Setup Supabase (Database)
+### 2. Konfigurasi Database (Supabase)
+Jalankan perintah SQL yang ada di `schema.sql` pada SQL Editor di dashboard Supabase Anda untuk menyiapkan tabel `users`.
 
-> Wajib dilakukan **sekali** sebelum menjalankan bot.
-
-1. Buat akun dan project baru di [supabase.com](https://supabase.com).
-2. Buka **SQL Editor** di dashboard Supabase.
-3. Jalankan query berikut:
-
-```sql
--- Buat tabel users untuk menyimpan fakta user
-create table if not exists public.users (
-    user_id       text        primary key,
-    facts         jsonb       not null default '[]'::jsonb,
-    message_count integer     not null default 0,
-    last_updated  timestamptz          default now()
-);
-
--- Aktifkan Row Level Security
-alter table public.users enable row level security;
-
--- Izinkan akses penuh untuk service role
-create policy "service role full access"
-    on public.users
-    for all
-    using (true)
-    with check (true);
+### 3. Konfigurasi Environment
+Buat file `.env` berdasarkan `.env.example` dan lengkapi nilai-nilainya:
+```env
+DISCORD_TOKEN=token_bot_anda
+AZURE_API_KEY=key_azure_ai_anda
+AZURE_ENDPOINT=https://your-resource.services.ai.azure.com/openai/v1/
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_service_role_key
 ```
 
-4. Ambil kredensial dari **Project Settings → API**:
-   - `Project URL` → `SUPABASE_URL`
-   - `service_role` key (bukan `anon`) → `SUPABASE_KEY` _(gunakan service_role untuk write access penuh)_
-
-### 3. Konfigurasi `.env`
-
-Salin `.env.example` menjadi `.env` dan isi semua nilai:
-
-```
-DISCORD_TOKEN=your_discord_bot_token
-CEREBRAS_API_KEY=your_cerebras_chat_api_key
-CEREBRAS_EXTRACTOR_API_KEY=your_cerebras_extractor_api_key
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=your_supabase_service_role_key
-```
-
-### 4. Jalankan
-
+### 4. Jalankan Bot
 ```bash
-python main.py
+npm start
 ```
 
-## Deploy ke Render.com
+## 🐳 Docker Deployment
+Bot ini siap untuk dideploy menggunakan Docker:
+```bash
+docker build -t airi-bot .
+docker run --env-file .env airi-bot
+```
 
-### 1. Push ke GitHub
-
-Pastikan semua file (kecuali `.env`) sudah di-push ke repository GitHub.
-
-### 2. Buat Web Service di Render
-
-1. Login ke [render.com](https://render.com).
-2. Klik **New → Web Service**.
-3. Connect repository GitHub kamu.
-4. Konfigurasi:
-   - **Name**: `airi-bot`
-   - **Runtime**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `python main.py`
-   - **Instance Type**: `Free`
-5. Tambahkan **Environment Variables**:
-   - `DISCORD_TOKEN` = token bot Discord
-   - `CEREBRAS_API_KEY` = API key Cerebras untuk chat model
-   - `CEREBRAS_EXTRACTOR_API_KEY` = API key Cerebras untuk extractor model
-   - `SUPABASE_URL` = URL project Supabase
-   - `SUPABASE_KEY` = service_role key Supabase
-   - `FLASK_PORT` = `8080`
-6. Klik **Create Web Service**.
-
-## Discord Bot Setup
-
-1. Buka [Discord Developer Portal](https://discord.com/developers/applications).
-2. Buat application baru atau pilih yang sudah ada.
-3. Di tab **Bot**:
-   - Aktifkan **Message Content Intent**.
-   - Aktifkan **Server Members Intent** (opsional).
-4. Di tab **OAuth2 → URL Generator**:
-   - Scopes: `bot`, `applications.commands`
-   - Bot Permissions: `Send Messages`, `Read Message History`, `Use Slash Commands`
-5. Gunakan URL yang di-generate untuk invite bot ke server kamu.
-
-## Cara Menggunakan
-
-- **Mention Airi** di server: `@Airi halo apa kabar?`
-- **DM Airi** langsung untuk chat pribadi.
-- **`/memory`** — Lihat fakta yang Airi ingat tentang kamu.
-- **`/reset`** — Hapus semua memori Airi tentang kamu.
-
-## Tech Stack
-
-| Komponen | Teknologi |
-|----------|-----------|
-| Bahasa | Python 3.10+ |
-| Discord Library | discord.py 2.3+ |
-| AI Model (Chat) | Cerebras `gpt-oss-120b` (fallback: `llama3.1-8b`) |
-| AI Model (Memory) | Cerebras `llama3.1-8b` |
-| Database | Supabase (PostgreSQL) |
-| Deployment | Render.com |
+## 🛠 Tech Stack
+- **Runtime**: Node.js 18+
+- **Library**: `discord.js`, `openai`, `@supabase/supabase-js`
+- **AI Model**: Kimi-K2.5 via Azure AI Foundry
+- **Database**: Supabase (PostgreSQL)
+- **Hosting**: Azure / Render (Container based)
